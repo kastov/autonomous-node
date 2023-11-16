@@ -4,7 +4,7 @@ from rpyc.utils.authenticators import SSLAuthenticator
 from rpyc.utils.server import ThreadedServer
 
 from certificate import generate_certificate
-from config import SERVICE_PORT, SSL_CERT_FILE, SSL_KEY_FILE, SSL_CLIENT_CERT_FILE
+from config import SERVICE_PORT, SSL_CERT_FILE, SSL_KEY_FILE, SSL_CLIENT_CERT_FILE, KEEP_ALIVE_SECONDS
 from logger import logger
 from service import XrayService
 
@@ -39,5 +39,5 @@ if __name__ == "__main__":
                             port=SERVICE_PORT,
                             authenticator=authenticator)
 
-    logger.info(f"Node service running on :{SERVICE_PORT}")
+    logger.info(f"Node service running on :{SERVICE_PORT}, node will be autonomous for {KEEP_ALIVE_SECONDS} seconds.")
     thread.start()

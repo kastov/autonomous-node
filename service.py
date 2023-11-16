@@ -1,10 +1,10 @@
 import time
 from socket import socket
-from threading import Thread
+from threading import Thread, Timer
 
 import rpyc
 
-from config import XRAY_ASSETS_PATH, XRAY_EXECUTABLE_PATH
+from config import XRAY_ASSETS_PATH, XRAY_EXECUTABLE_PATH, KEEP_ALIVE_SECONDS
 from logger import logger
 from xray import XRayConfig, XRayCore
 
@@ -45,6 +45,8 @@ class XrayService(rpyc.Service):
     def __init__(self):
         self.core = None
         self.connection = None
+        self.disconnect_timer = None
+        self.timer_completed = False
 
     def on_connect(self, conn):
         if self.connection:
@@ -60,15 +62,47 @@ class XrayService(rpyc.Service):
         self.connection.peer = peer
         logger.warning(f'Connected to {self.connection.peer}')
 
+        if self.disconnect_timer and self.disconnect_timer.is_alive():
+            logger.warning(f'Terminating timer, connected to {self.connection.peer}')
+            self.disconnect_timer.cancel()
+            self.disconnect_timer = None
+
     def on_disconnect(self, conn):
-        if conn is self.connection:
-            logger.warning(f'Disconnected from {self.connection.peer}')
+        try:
+            if conn is self.connection:
+                logger.warning(f'Disconnected fromX {self.connection.peer}')
 
-            if self.core is not None:
-                self.core.stop()
+                if self.disconnect_timer and self.disconnect_timer.is_alive():
+                    logger.debug('Terminating timer, disconnected')
+                    self.disconnect_timer.cancel()
 
+                logger.debug('Setting up new timer')
+
+                self.disconnect_timer = Timer(KEEP_ALIVE_SECONDS, self.check_connection)
+                self.disconnect_timer.start()
+                logger.warning(f'Received disconnected. Node still working for {KEEP_ALIVE_SECONDS} seconds')
+
+                self.connection = None
+
+        except Exception as e:
+            logger.error(f'Error in on_disconnect: {e}')
+
+    def check_connection(self):
+        logger.debug('Checking timer...')
+        logger.warning('New connection not established. Terminating Xray core...')
+        self.timer_completed = True
+        self.stop()
+
+    def stop(self):
+        if not self.started:
+            return
+
+        if not self.timer_completed:
+            logger.debug("Checking timer. Timer completed")
+            self.core.stop()
             self.core = None
-            self.connection = None
+        self.process = None
+        logger.warning("Xray core stopped [1]")
 
     @rpyc.exposed
     def start(self, config: str):
